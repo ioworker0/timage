@@ -95,8 +95,8 @@ var pushCmd = &cobra.Command{
 		if err != nil {
 			// Check if it's a "blob already exists" error
 			if strings.Contains(err.Error(), "BLOB_UPLOAD_INVALID") ||
-			   strings.Contains(err.Error(), "already exists") ||
-			   strings.Contains(err.Error(), "exist blob") {
+				strings.Contains(err.Error(), "already exists") ||
+				strings.Contains(err.Error(), "exist blob") {
 				cmd.Printf("  Config already exists, skipping\n")
 			} else {
 				cmd.Printf("Error: Failed to upload config: %v\n", err)
@@ -116,8 +116,8 @@ var pushCmd = &cobra.Command{
 			if err != nil {
 				// Check if it's a "blob already exists" error
 				if strings.Contains(err.Error(), "BLOB_UPLOAD_INVALID") ||
-				   strings.Contains(err.Error(), "already exists") ||
-				   strings.Contains(err.Error(), "exist blob") {
+					strings.Contains(err.Error(), "already exists") ||
+					strings.Contains(err.Error(), "exist blob") {
 					cmd.Printf("    Already exists, skipping\n")
 				} else {
 					cmd.Printf("Error: Failed to upload layer: %v\n", err)
@@ -136,16 +136,38 @@ var pushCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Determine content type from manifest data
-		var manifestObj struct {
-			MediaType string `json:"mediaType"`
+		// Parse and clean the manifest
+		var manifestObj map[string]interface{}
+		if err := json.Unmarshal(manifestData, &manifestObj); err != nil {
+			cmd.Printf("Error: Failed to parse manifest: %v\n", err)
+			os.Exit(1)
 		}
-		json.Unmarshal(manifestData, &manifestObj)
 
-		contentType := manifestObj.MediaType
+		// Get content type
+		contentType, _ := manifestObj["mediaType"].(string)
+
+		// Check if it's a manifest list/index
+		if contentType == "application/vnd.docker.distribution.manifest.list.v2+json" ||
+			contentType == "application/vnd.oci.image.index.v1+json" {
+			cmd.Printf("Error: Cannot push manifest list/index. Please pull and push individual platform manifests.\n")
+			os.Exit(1)
+		}
+
+		// Remove 'manifests' field if it exists (even if null) to ensure it's a pure manifest
+		// Some registries reject manifests with a 'manifests' field during docker build
+		delete(manifestObj, "manifests")
+
+		// Ensure it's a proper manifest v2
 		if contentType == "" {
-			// Default to Docker manifest v2
+			manifestObj["mediaType"] = "application/vnd.docker.distribution.manifest.v2+json"
 			contentType = "application/vnd.docker.distribution.manifest.v2+json"
+		}
+
+		// Re-marshal the cleaned manifest
+		manifestData, err = json.Marshal(manifestObj)
+		if err != nil {
+			cmd.Printf("Error: Failed to marshal manifest: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Upload manifest

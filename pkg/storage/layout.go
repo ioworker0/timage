@@ -28,9 +28,9 @@ func NewLayout(rootDir string) (*Layout, error) {
 // Image name format: registry/namespace/name:tag
 // e.g., docker.io/library/nginx:latest
 func (l *Layout) GetImageDir(imageName string) string {
-	// Replace special characters with underscores
-	safeName := strings.ReplaceAll(imageName, ":", "_")
-	safeName = strings.ReplaceAll(safeName, "/", "_")
+	// Replace : with _COLON_ and / with _SLASH_ to preserve the original format
+	safeName := strings.ReplaceAll(imageName, ":", "_COLON_")
+	safeName = strings.ReplaceAll(safeName, "/", "_SLASH_")
 
 	return filepath.Join(l.rootDir, "images", safeName)
 }
@@ -68,6 +68,22 @@ func (l *Layout) CreateImageDir(imageName string) error {
 	return nil
 }
 
+// decodeOldEncoding decodes old encoding format (where both / and : were replaced with _)
+// Uses heuristic: last _ is likely the tag separator (:), others are path separators (/)
+func decodeOldEncoding(dirName string) string {
+	// Find the last underscore
+	lastUnderscore := strings.LastIndex(dirName, "_")
+	if lastUnderscore == -1 {
+		return dirName
+	}
+
+	// Replace last _ with : (tag separator)
+	// Replace all other _ with / (path separators)
+	beforeTag := strings.ReplaceAll(dirName[:lastUnderscore], "_", "/")
+	tag := dirName[lastUnderscore+1:]
+	return beforeTag + ":" + tag
+}
+
 // ListImages returns a list of all stored images
 func (l *Layout) ListImages() ([]string, error) {
 	imagesDir := filepath.Join(l.rootDir, "images")
@@ -83,9 +99,19 @@ func (l *Layout) ListImages() ([]string, error) {
 	var images []string
 	for _, entry := range entries {
 		if entry.IsDir() {
-			// Convert directory name back to image name
-			imageName := strings.ReplaceAll(entry.Name(), "_", ":")
-			imageName = strings.ReplaceAll(imageName, "___", "/") // Temporary fix
+			dirName := entry.Name()
+			var imageName string
+
+			// Detect encoding format
+			if strings.Contains(dirName, "_SLASH_") || strings.Contains(dirName, "_COLON_") {
+				// New encoding format
+				imageName = strings.ReplaceAll(dirName, "_SLASH_", "/")
+				imageName = strings.ReplaceAll(imageName, "_COLON_", ":")
+			} else {
+				// Old encoding format (both / and : were replaced with _)
+				imageName = decodeOldEncoding(dirName)
+			}
+
 			images = append(images, imageName)
 		}
 	}

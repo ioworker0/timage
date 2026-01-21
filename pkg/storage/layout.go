@@ -119,16 +119,46 @@ func (l *Layout) ListImages() ([]string, error) {
 	return images, nil
 }
 
+// encodeOldEncoding encodes image name using old format (both / and : replaced with _)
+func encodeOldEncoding(imageName string) string {
+	safeName := strings.ReplaceAll(imageName, ":", "_")
+	safeName = strings.ReplaceAll(safeName, "/", "_")
+	return safeName
+}
+
+// findImageDir finds the actual directory for an image, checking both new and old encoding formats
+func (l *Layout) findImageDir(imageName string) string {
+	imagesDir := filepath.Join(l.rootDir, "images")
+
+	// Try new encoding format first
+	newDirName := strings.ReplaceAll(imageName, ":", "_COLON_")
+	newDirName = strings.ReplaceAll(newDirName, "/", "_SLASH_")
+	newPath := filepath.Join(imagesDir, newDirName)
+	if _, err := os.Stat(newPath); err == nil {
+		return newPath
+	}
+
+	// Try old encoding format
+	oldDirName := encodeOldEncoding(imageName)
+	oldPath := filepath.Join(imagesDir, oldDirName)
+	if _, err := os.Stat(oldPath); err == nil {
+		return oldPath
+	}
+
+	return ""
+}
+
 // ImageExists checks if an image exists in storage
 func (l *Layout) ImageExists(imageName string) bool {
-	manifestPath := l.GetManifestPath(imageName)
-	_, err := os.Stat(manifestPath)
-	return err == nil
+	return l.findImageDir(imageName) != ""
 }
 
 // RemoveImage removes an image from storage
 func (l *Layout) RemoveImage(imageName string) error {
-	imageDir := l.GetImageDir(imageName)
+	imageDir := l.findImageDir(imageName)
+	if imageDir == "" {
+		return fmt.Errorf("image not found")
+	}
 
 	if err := os.RemoveAll(imageDir); err != nil {
 		return fmt.Errorf("failed to remove image directory: %w", err)

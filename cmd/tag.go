@@ -63,11 +63,11 @@ var tagCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Copy layers directory
+		// Copy layers directory using the same encoding as layout.go
 		sourceLayersDir := filepath.Join(storageDir, "images",
-			strings.ReplaceAll(strings.ReplaceAll(source, ":", "_"), "/", "_"), "layers")
+			strings.ReplaceAll(strings.ReplaceAll(source, ":", "_COLON_"), "/", "_SLASH_"), "layers")
 		targetLayersDir := filepath.Join(storageDir, "images",
-			strings.ReplaceAll(strings.ReplaceAll(target, ":", "_"), "/", "_"), "layers")
+			strings.ReplaceAll(strings.ReplaceAll(target, ":", "_COLON_"), "/", "_SLASH_"), "layers")
 
 		if err := os.MkdirAll(filepath.Dir(targetLayersDir), 0755); err != nil {
 			cmd.Printf("Error: Failed to create target directory: %v\n", err)

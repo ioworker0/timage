@@ -19,8 +19,8 @@ type Manifest struct {
 
 // ManifestEntry represents an entry in a manifest list
 type ManifestEntry struct {
-	MediaType string `json:"mediaType"`
-	Digest    string `json:"digest"`
+	MediaType string   `json:"mediaType"`
+	Digest    string   `json:"digest"`
 	Platform  Platform `json:"platform"`
 }
 
@@ -53,7 +53,7 @@ func (c *Client) GetManifest(name, reference string) (*Manifest, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+		return nil, newRegistryError(resp.StatusCode, body)
 	}
 
 	// Get content type
@@ -67,9 +67,9 @@ func (c *Client) GetManifest(name, reference string) (*Manifest, error) {
 
 	// If it's a manifest list or OCI image index, resolve to the specific manifest for our platform
 	isManifestList := manifest.MediaType == "application/vnd.docker.distribution.manifest.list.v2+json" ||
-	                  contentType == "application/vnd.docker.distribution.manifest.list.v2+json" ||
-	                  manifest.MediaType == "application/vnd.oci.image.index.v1+json" ||
-	                  contentType == "application/vnd.oci.image.index.v1+json"
+		contentType == "application/vnd.docker.distribution.manifest.list.v2+json" ||
+		manifest.MediaType == "application/vnd.oci.image.index.v1+json" ||
+		contentType == "application/vnd.oci.image.index.v1+json"
 
 	if isManifestList {
 		// Find amd64 manifest
@@ -100,7 +100,7 @@ func (c *Client) GetManifestRaw(name, reference string) ([]byte, string, error) 
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, "", fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+		return nil, "", newRegistryError(resp.StatusCode, body)
 	}
 
 	// Get content type

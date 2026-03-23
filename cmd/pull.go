@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -66,7 +67,7 @@ var pullCmd = &cobra.Command{
 		// Get manifest
 		manifest, err := client.GetManifest(name, tag)
 		if err != nil {
-			cmd.Printf("Error: Failed to get manifest: %v\n", err)
+			cmd.Printf("Error: %s\n", formatPullManifestError(err, name, tag, registryURL))
 			os.Exit(1)
 		}
 
@@ -130,20 +131,20 @@ var pullCmd = &cobra.Command{
 		// First fetch by tag to check if it's a manifest list
 		manifestRaw, contentType, err := client.GetManifestRaw(name, tag)
 		if err != nil {
-			cmd.Printf("Error: Failed to get raw manifest: %v\n", err)
+			cmd.Printf("Error: %s\n", formatPullManifestError(err, name, tag, registryURL))
 			os.Exit(1)
 		}
 
 		// Check if it's a manifest list
 		isManifestList := contentType == "application/vnd.docker.distribution.manifest.list.v2+json" ||
-		                  contentType == "application/vnd.oci.image.index.v1+json"
+			contentType == "application/vnd.oci.image.index.v1+json"
 
 		if isManifestList {
 			// Parse to find amd64 manifest digest
 			var index struct {
 				Manifests []struct {
-					Digest    string
-					Platform  struct {
+					Digest   string
+					Platform struct {
 						Architecture string
 						OS           string
 					}
@@ -223,6 +224,28 @@ func parseImageRef(imageRef string) (name, tag, registry string) {
 	}
 
 	return name, tag, registry
+}
+
+func formatPullManifestError(err error, name, reference, registryURL string) string {
+	var registryErr *registry.ErrorResponse
+	if errors.As(err, &registryErr) && registryErr.HasCode("MANIFEST_UNKNOWN") {
+		tag := registryErr.UnknownTag()
+		if tag == "" {
+			tag = reference
+		}
+
+		if strings.HasPrefix(reference, "sha256:") {
+			return fmt.Sprintf("manifest %q was not found for %s on %s", reference, name, registryURL)
+		}
+
+		if tag == "latest" {
+			return fmt.Sprintf("tag %q was not found for %s on %s. This repository does not publish a latest tag; use an explicit version tag.", tag, name, registryURL)
+		}
+
+		return fmt.Sprintf("tag %q was not found for %s on %s", tag, name, registryURL)
+	}
+
+	return fmt.Sprintf("Failed to get manifest: %v", err)
 }
 
 func downloadBlobWithProgress(client *registry.Client, store *storage.Store, name, digest, label string) (string, error) {
